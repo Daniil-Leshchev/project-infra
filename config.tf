@@ -26,6 +26,15 @@ variable "image_id" {
   type = string
 }
 
+# LOCALS
+
+locals {
+  db_workdir         = "/opt/postgres"
+  db_compose_b64     = base64encode(file("${path.module}/docker-compose.yml"))
+  db_env_b64         = base64encode(file("${path.module}/.env"))
+  db_init_sql_b64    = base64encode(file("${path.module}/init.sql"))
+}
+
 # NETWORK
 
 resource "yandex_vpc_network" "network-1" {
@@ -66,6 +75,30 @@ resource "yandex_compute_instance" "vm-1" {
     ssh-keys = <<EOF
 ubuntu:${file("~/.ssh/id_rsa.pub")}
 ubuntu:${file("~/.ssh/id_rsa_sasha.pub")}
+EOF
+
+    user-data = <<EOF
+#cloud-config
+runcmd:
+  - |
+    #!/usr/bin/env bash
+    set -eu
+
+    WORKDIR="${local.db_workdir}"
+
+    mkdir -p "$WORKDIR"
+
+    echo "${local.db_compose_b64}"  | base64 -d > "$WORKDIR/docker-compose.yml"
+    echo "${local.db_env_b64}"      | base64 -d > "$WORKDIR/.env"
+    echo "${local.db_init_sql_b64}" | base64 -d > "$WORKDIR/init.sql"
+
+    chmod 0644 "$WORKDIR/docker-compose.yml" "$WORKDIR/init.sql"
+    chmod 0600 "$WORKDIR/.env"
+
+    cd "$WORKDIR"
+
+    docker compose up -d
+    docker compose ps
 EOF
   }
 }
