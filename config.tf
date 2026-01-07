@@ -41,6 +41,38 @@ resource "yandex_vpc_network" "network-1" {
   name = "project-main-network"
 }
 
+resource "yandex_vpc_security_group" "ssh_sg" {
+  name      = "ssh-sg"
+  network_id = yandex_vpc_network.network-1.id
+
+  ingress {
+    protocol   = "TCP"
+    port       = 22
+    v4_cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    protocol       = "ANY"
+    v4_cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "yandex_vpc_security_group" "db_sg" {
+  name      = "db-sg"
+  network_id = yandex_vpc_network.network-1.id
+
+  ingress {
+    protocol   = "TCP"
+    port       = 5432
+    v4_cidr_blocks = ["10.3.0.0/24"]
+  }
+
+  egress {
+    protocol       = "ANY"
+    v4_cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
 # PUBLIC SUBNET
 
 resource "yandex_vpc_subnet" "public_subnet" {
@@ -86,8 +118,12 @@ resource "yandex_compute_instance" "vm-1" {
   }
 
   network_interface {
-    subnet_id = yandex_vpc_subnet.subnet-1.id
-    nat       = true
+    subnet_id         = yandex_vpc_subnet.subnet-1.id
+    nat               = true
+    security_group_ids = [
+      yandex_vpc_security_group.ssh_sg.id,
+      yandex_vpc_security_group.db_sg.id
+    ]
   }
 
 
