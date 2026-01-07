@@ -41,6 +41,25 @@ resource "yandex_vpc_network" "network-1" {
   name = "project-main-network"
 }
 
+# PUBLIC SUBNET
+
+resource "yandex_vpc_subnet" "public_subnet" {
+  name           = "project-public-subnet-a"
+  zone           = "ru-central1-a"
+  network_id     = yandex_vpc_network.network-1.id
+  v4_cidr_blocks = ["10.3.0.0/24"]
+}
+
+# PRIVATE SUBNET
+
+resource "yandex_vpc_subnet" "private_db_subnet" {
+  name           = "project-db-private-subnet-a"
+  zone           = "ru-central1-a"
+  network_id     = yandex_vpc_network.network-1.id
+  v4_cidr_blocks = ["10.3.1.0/24"]
+}
+
+# OLD SUBNET
 resource "yandex_vpc_subnet" "subnet-1" {
   name           = "project-main-subnet-a"
   zone           = "ru-central1-a"
@@ -70,6 +89,7 @@ resource "yandex_compute_instance" "vm-1" {
     subnet_id = yandex_vpc_subnet.subnet-1.id
     nat       = true
   }
+
 
   metadata = {
     ssh-keys = <<EOF
