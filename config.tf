@@ -29,10 +29,11 @@ variable "image_id" {
 # LOCALS
 
 locals {
-  db_workdir         = "/opt/postgres"
-  db_compose_b64     = base64encode(file("${path.module}/docker-compose.yml"))
-  db_env_b64         = base64encode(file("${path.module}/.env"))
-  db_init_sql_b64    = base64encode(file("${path.module}/init.sql"))
+  db_workdir              = "/opt/postgres"
+  db_compose_b64          = base64encode(file("${path.module}/docker-compose.yml"))
+  db_env_b64              = base64encode(file("${path.module}/.env"))
+  db_init_sql_b64         = base64encode(file("${path.module}/init.sql"))
+  bastion_private_key_b64 = base64encode(file("~/.ssh/id_rsa"))
 }
 
 # NETWORK
@@ -41,13 +42,28 @@ resource "yandex_vpc_network" "network-1" {
   name = "project-main-network"
 }
 
+resource "yandex_vpc_gateway" "nat_gw" {
+  name = "project-nat-gateway"
+  shared_egress_gateway {}
+}
+
+resource "yandex_vpc_route_table" "private_rt" {
+  name       = "project-private-rt"
+  network_id = yandex_vpc_network.network-1.id
+
+  static_route {
+    destination_prefix = "0.0.0.0/0"
+    gateway_id         = yandex_vpc_gateway.nat_gw.id
+  }
+}
+
 resource "yandex_vpc_security_group" "ssh_sg" {
-  name      = "ssh-sg"
+  name       = "ssh-sg"
   network_id = yandex_vpc_network.network-1.id
 
   ingress {
-    protocol   = "TCP"
-    port       = 22
+    protocol       = "TCP"
+    port           = 22
     v4_cidr_blocks = ["0.0.0.0/0"]
   }
 
@@ -74,12 +90,12 @@ resource "yandex_vpc_security_group" "db_ssh_sg" {
 }
 
 resource "yandex_vpc_security_group" "db_sg" {
-  name      = "db-sg"
+  name       = "db-sg"
   network_id = yandex_vpc_network.network-1.id
 
   ingress {
-    protocol   = "TCP"
-    port       = 5432
+    protocol       = "TCP"
+    port           = 5432
     v4_cidr_blocks = ["10.3.0.0/24"]
   }
 
@@ -127,7 +143,16 @@ resource "yandex_compute_instance" "bastion" {
   metadata = {
     ssh-keys = <<EOF
 ubuntu:${file("~/.ssh/id_rsa.pub")}
-ubuntu:${file("~/.ssh/id_rsa_sasha.pub")}
+EOF
+
+    user-data = <<EOF
+#cloud-config
+runcmd:
+  - |
+    mkdir -p /home/ubuntu/.ssh
+    echo "${local.bastion_private_key_b64}" | base64 -d > /home/ubuntu/.ssh/id_rsa
+    chmod 600 /home/ubuntu/.ssh/id_rsa
+    chown -R ubuntu:ubuntu /home/ubuntu/.ssh
 EOF
   }
 }
@@ -138,6 +163,7 @@ resource "yandex_vpc_subnet" "private_db_subnet" {
   zone           = "ru-central1-a"
   network_id     = yandex_vpc_network.network-1.id
   v4_cidr_blocks = ["10.3.1.0/24"]
+  route_table_id = yandex_vpc_route_table.private_rt.id
 }
 
 # DB VM
@@ -161,8 +187,8 @@ resource "yandex_compute_instance" "vm-1" {
   }
 
   network_interface {
-    subnet_id         = yandex_vpc_subnet.private_db_subnet.id
-    nat               = false
+    subnet_id = yandex_vpc_subnet.private_db_subnet.id
+    nat       = false
     security_group_ids = [
       yandex_vpc_security_group.db_sg.id,
       yandex_vpc_security_group.db_ssh_sg.id
