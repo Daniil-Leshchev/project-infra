@@ -57,6 +57,22 @@ resource "yandex_vpc_security_group" "ssh_sg" {
   }
 }
 
+resource "yandex_vpc_security_group" "db_ssh_sg" {
+  name       = "db-ssh-from-bastion-sg"
+  network_id = yandex_vpc_network.network-1.id
+
+  ingress {
+    protocol       = "TCP"
+    port           = 22
+    v4_cidr_blocks = ["10.3.0.0/24"]
+  }
+
+  egress {
+    protocol       = "ANY"
+    v4_cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
 resource "yandex_vpc_security_group" "db_sg" {
   name      = "db-sg"
   network_id = yandex_vpc_network.network-1.id
@@ -80,6 +96,40 @@ resource "yandex_vpc_subnet" "public_subnet" {
   zone           = "ru-central1-a"
   network_id     = yandex_vpc_network.network-1.id
   v4_cidr_blocks = ["10.3.0.0/24"]
+}
+
+# BASTION HOST
+
+resource "yandex_compute_instance" "bastion" {
+  name        = "project-bastion-vm-01"
+  platform_id = "standard-v1"
+  zone        = "ru-central1-a"
+
+  resources {
+    cores  = 2
+    memory = 2
+  }
+
+  boot_disk {
+    initialize_params {
+      image_id = var.image_id
+    }
+  }
+
+  network_interface {
+    subnet_id = yandex_vpc_subnet.public_subnet.id
+    nat       = true
+    security_group_ids = [
+      yandex_vpc_security_group.ssh_sg.id
+    ]
+  }
+
+  metadata = {
+    ssh-keys = <<EOF
+ubuntu:${file("~/.ssh/id_rsa.pub")}
+ubuntu:${file("~/.ssh/id_rsa_sasha.pub")}
+EOF
+  }
 }
 
 # PRIVATE SUBNET
@@ -119,10 +169,10 @@ resource "yandex_compute_instance" "vm-1" {
 
   network_interface {
     subnet_id         = yandex_vpc_subnet.subnet-1.id
-    nat               = true
+    nat               = false
     security_group_ids = [
-      yandex_vpc_security_group.ssh_sg.id,
-      yandex_vpc_security_group.db_sg.id
+      yandex_vpc_security_group.db_sg.id,
+      yandex_vpc_security_group.db_ssh_sg.id
     ]
   }
 
@@ -167,4 +217,8 @@ output "internal_ip_address_vm_1" {
 
 output "external_ip_address_vm_1" {
   value = yandex_compute_instance.vm-1.network_interface.0.nat_ip_address
+}
+
+output "external_ip_address_bastion" {
+  value = yandex_compute_instance.bastion.network_interface.0.nat_ip_address
 }
