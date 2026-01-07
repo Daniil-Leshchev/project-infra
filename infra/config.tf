@@ -12,6 +12,14 @@ provider "yandex" {
   zone      = "ru-central1-a"
 }
 
+data "terraform_remote_state" "iam" {
+  backend = "local"
+
+  config = {
+    path = "../iam/terraform.tfstate"
+  }
+}
+
 # VARIABLES
 
 variable "cloud_id" {
@@ -30,10 +38,12 @@ variable "image_id" {
 
 locals {
   db_workdir              = "/opt/postgres"
-  db_compose_b64          = base64encode(file("${path.module}/docker-compose.yml"))
-  db_env_b64              = base64encode(file("${path.module}/.env"))
-  db_init_sql_b64         = base64encode(file("${path.module}/init.sql"))
+  db_compose_b64          = base64encode(file("${path.module}/files/docker-compose.yml"))
+  db_init_sql_b64         = base64encode(file("${path.module}/files/init.sql"))
+  db_env_b64              = base64encode(file("${path.module}/../.env"))
   bastion_private_key_b64 = base64encode(file("~/.ssh/id_rsa"))
+  s3_access_key_id        = data.terraform_remote_state.iam.outputs.storage_access_key_id
+  s3_secret_access_key    = data.terraform_remote_state.iam.outputs.storage_secret_access_key
 }
 
 # NETWORK
@@ -214,8 +224,8 @@ runcmd:
     mkdir -p "$WORKDIR"
 
     echo "${local.db_compose_b64}"  | base64 -d > "$WORKDIR/docker-compose.yml"
-    echo "${local.db_env_b64}"      | base64 -d > "$WORKDIR/.env"
     echo "${local.db_init_sql_b64}" | base64 -d > "$WORKDIR/init.sql"
+    echo "${local.db_env_b64}"      | base64 -d > "$WORKDIR/.env"
 
     chmod 0644 "$WORKDIR/docker-compose.yml" "$WORKDIR/init.sql"
     chmod 0600 "$WORKDIR/.env"
