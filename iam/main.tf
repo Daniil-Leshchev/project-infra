@@ -64,6 +64,22 @@ resource "yandex_storage_bucket" "reports_bucket" {
   ]
 }
 
+resource "yandex_container_registry" "backend_registry" {
+  name = "backend-registry"
+}
+
+resource "yandex_resourcemanager_folder_iam_member" "trading_reports_sa_registry_pusher" {
+  folder_id = var.folder_id
+  role      = "container-registry.images.pusher"
+  member    = "serviceAccount:${yandex_iam_service_account.trading_reports_sa.id}"
+}
+
+resource "yandex_resourcemanager_folder_iam_member" "trading_reports_sa_registry_puller" {
+  folder_id = var.folder_id
+  role      = "container-registry.images.puller"
+  member    = "serviceAccount:${yandex_iam_service_account.trading_reports_sa.id}"
+}
+
 output "storage_access_key_id" {
   value       = yandex_iam_service_account_static_access_key.trading_reports_sa_key.access_key
   description = "Access key for Object Storage"
@@ -78,4 +94,14 @@ output "storage_secret_access_key" {
 output "storage_bucket_name" {
   value       = yandex_storage_bucket.reports_bucket.bucket
   description = "Object Storage bucket name for trading reports"
+}
+
+output "container_registry_id" {
+  value       = yandex_container_registry.backend_registry.id
+  description = "ID of Container Registry"
+}
+
+output "container_registry_name" {
+  value       = yandex_container_registry.backend_registry.name
+  description = "Name of Container Registry"
 }
