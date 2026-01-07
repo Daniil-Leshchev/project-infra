@@ -133,20 +133,11 @@ EOF
 }
 
 # PRIVATE SUBNET
-
 resource "yandex_vpc_subnet" "private_db_subnet" {
   name           = "project-db-private-subnet-a"
   zone           = "ru-central1-a"
   network_id     = yandex_vpc_network.network-1.id
   v4_cidr_blocks = ["10.3.1.0/24"]
-}
-
-# OLD SUBNET
-resource "yandex_vpc_subnet" "subnet-1" {
-  name           = "project-main-subnet-a"
-  zone           = "ru-central1-a"
-  network_id     = yandex_vpc_network.network-1.id
-  v4_cidr_blocks = ["10.2.0.0/16"]
 }
 
 # DB VM
@@ -155,6 +146,8 @@ resource "yandex_compute_instance" "vm-1" {
   name        = "project-db-vm-01"
   platform_id = "standard-v1"
   zone        = "ru-central1-a"
+
+  allow_stopping_for_update = true
 
   resources {
     cores  = 2
@@ -168,7 +161,7 @@ resource "yandex_compute_instance" "vm-1" {
   }
 
   network_interface {
-    subnet_id         = yandex_vpc_subnet.subnet-1.id
+    subnet_id         = yandex_vpc_subnet.private_db_subnet.id
     nat               = false
     security_group_ids = [
       yandex_vpc_security_group.db_sg.id,
