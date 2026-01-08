@@ -21,7 +21,7 @@ variable "folder_id" {
   description = "Yandex Cloud Folder ID"
 }
 
-variable "postgres_password" {
+variable "db_pass" {
   type        = string
   description = "PostgreSQL password for backend"
   sensitive   = true
@@ -54,8 +54,8 @@ resource "yandex_lockbox_secret_version" "backend_secrets_v1" {
   secret_id = yandex_lockbox_secret.backend_secrets.id
 
   entries {
-    key        = "POSTGRES_PASSWORD"
-    text_value = var.postgres_password
+    key        = "DB_PASS"
+    text_value = var.db_pass
   }
 
   entries {

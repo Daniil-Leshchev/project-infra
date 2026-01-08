@@ -44,7 +44,7 @@ variable "backend_memory" {
 
 variable "backend_concurrency" {
   type    = number
-  default = 6
+  default = 10
 }
 
 # VARIABLES
@@ -131,7 +131,7 @@ resource "yandex_vpc_security_group" "db_sg" {
   ingress {
     protocol       = "TCP"
     port           = 5432
-    v4_cidr_blocks = ["10.3.0.0/24"]
+    v4_cidr_blocks = ["198.19.0.0/16"]
   }
 
   egress {
@@ -272,10 +272,13 @@ resource "yandex_serverless_container" "backend" {
   execution_timeout = "30s"
   concurrency       = var.backend_concurrency
 
+  service_account_id = data.terraform_remote_state.iam.outputs.runtime_service_account_id
+
   image {
     url = var.backend_image_url
+
     environment = {
-      DB_HOST               = yandex_compute_instance.vm-1.network_interface.0.ip_address
+      DB_HOST               = yandex_compute_instance.vm-1.network_interface[0].ip_address
       DB_PORT               = "5432"
       DB_NAME               = "exchange_db"
       DB_USER               = "postgres"
@@ -285,10 +288,10 @@ resource "yandex_serverless_container" "backend" {
   }
 
   secrets {
-    environment_variable = "POSTGRES_PASSWORD"
+    environment_variable = "DB_PASS"
     id                   = data.yandex_lockbox_secret.backend.id
     version_id           = data.yandex_lockbox_secret_version.backend.id
-    key                  = "POSTGRES_PASSWORD"
+    key                  = "DB_PASS"
   }
 
   secrets {
@@ -305,12 +308,9 @@ resource "yandex_serverless_container" "backend" {
     key                  = "YC_SECRET_ACCESS_KEY"
   }
 
-  service_account_id = data.terraform_remote_state.iam.outputs.runtime_service_account_id
-
   connectivity {
     network_id = yandex_vpc_network.network-1.id
   }
-
 }
 
 # OUTPUTS
