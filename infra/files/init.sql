@@ -59,20 +59,3 @@ CREATE INDEX IF NOT EXISTS idx_orders_ticker ON orders(instrument_ticker);
 CREATE INDEX IF NOT EXISTS idx_orders_price ON orders(price);
 CREATE INDEX IF NOT EXISTS idx_transactions_ticker ON transactions(ticker);
 CREATE INDEX IF NOT EXISTS idx_transactions_timestamp ON transactions(timestamp);
-
-INSERT INTO instruments (ticker, name) VALUES
-    ('USD', 'US Dollar'),
-    ('AAPL', 'Apple Inc.'),
-    ('GOOGL', 'Alphabet Inc.'),
-    ('MSFT', 'Microsoft Corporation'),
-    ('TSLA', 'Tesla Inc.')
-ON CONFLICT (ticker) DO NOTHING;
-
-INSERT INTO users (id, name, api_key, role) VALUES
-    ('11111111-1111-1111-1111-111111111111', 'Test User', 'test-api-key-123', 'USER')
-ON CONFLICT (id) DO NOTHING;
-
-INSERT INTO balances (user_id, instrument_ticker, amount) VALUES
-    ('11111111-1111-1111-1111-111111111111', 'USD', 100000),
-    ('11111111-1111-1111-1111-111111111111', 'AAPL', 100)
-ON CONFLICT (user_id, instrument_ticker) DO NOTHING;

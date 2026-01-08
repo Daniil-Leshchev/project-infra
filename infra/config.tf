@@ -67,6 +67,7 @@ locals {
   db_workdir              = "/opt/postgres"
   db_compose_b64          = base64encode(file("${path.module}/files/docker-compose.yml"))
   db_init_sql_b64         = base64encode(file("${path.module}/files/init.sql"))
+  db_seed_sql_b64         = base64encode(file("${path.module}/files/seed.sql"))
   db_env_b64              = base64encode(file("${path.module}/files/.env"))
   bastion_private_key_b64 = base64encode(file("~/.ssh/id_rsa"))
 }
@@ -250,9 +251,10 @@ runcmd:
 
     echo "${local.db_compose_b64}"  | base64 -d > "$WORKDIR/docker-compose.yml"
     echo "${local.db_init_sql_b64}" | base64 -d > "$WORKDIR/init.sql"
+    echo "${local.db_seed_sql_b64}" | base64 -d > "$WORKDIR/seed.sql"
     echo "${local.db_env_b64}"      | base64 -d > "$WORKDIR/.env"
 
-    chmod 0644 "$WORKDIR/docker-compose.yml" "$WORKDIR/init.sql"
+    chmod 0644 "$WORKDIR/docker-compose.yml" "$WORKDIR/init.sql" "$WORKDIR/seed.sql"
     chmod 0600 "$WORKDIR/.env"
 
     cd "$WORKDIR"
