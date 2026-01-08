@@ -61,6 +61,24 @@ variable "image_id" {
   type = string
 }
 
+variable "db_port" {
+  type    = string
+  default = "5432"
+}
+
+variable "db_name" {
+  type    = string
+}
+
+variable "db_user" {
+  type    = string
+}
+
+variable "yc_region" {
+  type    = string
+  default = "ru-central1"
+}
+
 # LOCALS
 
 locals {
@@ -281,11 +299,11 @@ resource "yandex_serverless_container" "backend" {
 
     environment = {
       DB_HOST               = yandex_compute_instance.vm-1.network_interface[0].ip_address
-      DB_PORT               = "5432"
-      DB_NAME               = "exchange_db"
-      DB_USER               = "postgres"
+      DB_PORT               = var.db_port
+      DB_NAME               = var.db_name
+      DB_USER               = var.db_user
       YC_OBJ_STORAGE_BUCKET = data.terraform_remote_state.iam.outputs.storage_bucket_name
-      YC_REGION             = "ru-central1"
+      YC_REGION             = var.yc_region
     }
   }
 

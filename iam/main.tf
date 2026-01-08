@@ -36,11 +36,6 @@ resource "yandex_iam_service_account" "storage_sa" {
   description = "Доступ backend к Object Storage"
 }
 
-resource "yandex_iam_service_account" "registry_ci_sa" {
-  name        = "backend-registry-ci-sa"
-  description = "CI/CD доступ к Container Registry"
-}
-
 resource "yandex_iam_service_account" "runtime_sa" {
   name        = "backend-runtime-sa"
   description = "Runtime service account для serverless backend"
@@ -104,8 +99,6 @@ resource "yandex_storage_bucket" "reports_bucket" {
 resource "time_sleep" "wait_iam" {
   depends_on = [
     yandex_resourcemanager_folder_iam_member.storage_sa_role,
-    yandex_resourcemanager_folder_iam_member.registry_ci_pusher,
-    yandex_resourcemanager_folder_iam_member.registry_ci_puller,
     yandex_resourcemanager_folder_iam_member.runtime_logs,
     yandex_resourcemanager_folder_iam_member.runtime_registry_puller
   ]
@@ -120,18 +113,6 @@ resource "yandex_resourcemanager_folder_iam_member" "runtime_registry_puller" {
 
 resource "yandex_container_registry" "backend_registry" {
   name = "backend-registry"
-}
-
-resource "yandex_resourcemanager_folder_iam_member" "registry_ci_pusher" {
-  folder_id = var.folder_id
-  role      = "container-registry.images.pusher"
-  member    = "serviceAccount:${yandex_iam_service_account.registry_ci_sa.id}"
-}
-
-resource "yandex_resourcemanager_folder_iam_member" "registry_ci_puller" {
-  folder_id = var.folder_id
-  role      = "container-registry.images.puller"
-  member    = "serviceAccount:${yandex_iam_service_account.registry_ci_sa.id}"
 }
 
 resource "yandex_resourcemanager_folder_iam_member" "runtime_logs" {
@@ -181,11 +162,6 @@ output "container_registry_name" {
 output "runtime_service_account_id" {
   value       = yandex_iam_service_account.runtime_sa.id
   description = "Service account ID for serverless backend runtime"
-}
-
-output "registry_ci_service_account_id" {
-  value       = yandex_iam_service_account.registry_ci_sa.id
-  description = "Service account ID for Container Registry CI/CD"
 }
 
 output "lockbox_secret_id" {
