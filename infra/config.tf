@@ -315,6 +315,43 @@ resource "yandex_serverless_container" "backend" {
   }
 }
 
+# API GATEWAY
+resource "yandex_api_gateway" "backend_gw" {
+  name                = "project-backend-gw"
+  description         = "API Gateway for serverless backend"
+
+  spec = <<EOF
+openapi: 3.0.0
+info:
+  title: Exchange API
+  version: 1.0.0
+x-yc-apigateway:
+  rate_limit:
+    requests_per_second: 5
+    burst: 10
+    key:
+      header: Authorization
+
+paths:
+  /{proxy+}:
+    x-yc-apigateway-any-method:
+      parameters:
+        - name: proxy
+          in: path
+          required: true
+          schema:
+            type: string
+      x-yc-apigateway-integration:
+        type: serverless_containers
+        container_id: ${yandex_serverless_container.backend.id}
+        service_account_id: ${data.terraform_remote_state.iam.outputs.api_gw_service_account_id}
+        timeout: 30s
+        headers:
+          Authorization: "{request.headers.Authorization}"
+EOF
+}
+
+#
 # OUTPUTS
 
 output "internal_ip_address_vm_1" {
@@ -331,4 +368,8 @@ output "external_ip_address_bastion" {
 
 output "backend_container_id" {
   value = yandex_serverless_container.backend.id
+}
+
+output "api_gw_domain" {
+  value = yandex_api_gateway.backend_gw.domain
 }

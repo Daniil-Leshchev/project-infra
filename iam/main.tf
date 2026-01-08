@@ -46,6 +46,11 @@ resource "yandex_iam_service_account" "runtime_sa" {
   description = "Runtime service account для serverless backend"
 }
 
+resource "yandex_iam_service_account" "api_gw_sa" {
+  name        = "api-gateway-sa"
+  description = "Service account for API Gateway to invoke serverless backend"
+}
+
 resource "yandex_lockbox_secret" "backend_secrets" {
   name = "backend-secrets"
 }
@@ -141,6 +146,12 @@ resource "yandex_resourcemanager_folder_iam_member" "runtime_lockbox_access" {
   member    = "serviceAccount:${yandex_iam_service_account.runtime_sa.id}"
 }
 
+resource "yandex_resourcemanager_folder_iam_member" "api_gw_invoker" {
+  folder_id = var.folder_id
+  role      = "serverless.containers.invoker"
+  member    = "serviceAccount:${yandex_iam_service_account.api_gw_sa.id}"
+}
+
 output "storage_access_key_id" {
   value       = yandex_iam_service_account_static_access_key.storage_sa_key.access_key
   description = "Access key for Object Storage"
@@ -180,4 +191,9 @@ output "registry_ci_service_account_id" {
 output "lockbox_secret_id" {
   value       = yandex_lockbox_secret.backend_secrets.id
   description = "Lockbox secret ID with backend secrets"
+}
+
+output "api_gw_service_account_id" {
+  value       = yandex_iam_service_account.api_gw_sa.id
+  description = "Service account ID for API Gateway"
 }
