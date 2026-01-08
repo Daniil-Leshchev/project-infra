@@ -343,12 +343,6 @@ openapi: 3.0.0
 info:
   title: Exchange API
   version: 1.0.0
-x-yc-apigateway:
-  rate_limit:
-    requests_per_second: 5
-    burst: 10
-    key:
-      header: Authorization
 
 paths:
   /{proxy+}:
