@@ -11,46 +11,79 @@ terraform {
   }
 }
 
+variable "cloud_id" {
+  type        = string
+  description = "Yandex Cloud ID"
+}
+
+variable "folder_id" {
+  type        = string
+  description = "Yandex Cloud Folder ID"
+}
+
+variable "postgres_password" {
+  type        = string
+  description = "PostgreSQL password for backend"
+  sensitive   = true
+}
 provider "yandex" {
   folder_id = var.folder_id
   cloud_id  = var.cloud_id
 }
 
-variable "cloud_id" {
-  type = string
+resource "yandex_iam_service_account" "storage_sa" {
+  name        = "reports-storage-sa"
+  description = "Доступ backend к Object Storage"
 }
 
-variable "folder_id" {
-  type = string
+resource "yandex_iam_service_account" "registry_ci_sa" {
+  name        = "backend-registry-ci-sa"
+  description = "CI/CD доступ к Container Registry"
 }
 
-resource "yandex_iam_service_account" "trading_reports_sa" {
-  name        = "trading-reports-sa"
-  description = "Для записи отчетов в Object Storage"
+resource "yandex_iam_service_account" "runtime_sa" {
+  name        = "backend-runtime-sa"
+  description = "Runtime service account для serverless backend"
 }
 
-resource "yandex_resourcemanager_folder_iam_member" "trading_reports_sa_storage" {
+resource "yandex_lockbox_secret" "backend_secrets" {
+  name = "backend-secrets"
+}
+
+resource "yandex_lockbox_secret_version" "backend_secrets_v1" {
+  secret_id = yandex_lockbox_secret.backend_secrets.id
+
+  entries {
+    key        = "POSTGRES_PASSWORD"
+    text_value = var.postgres_password
+  }
+
+  entries {
+    key        = "YC_ACCESS_KEY_ID"
+    text_value = yandex_iam_service_account_static_access_key.storage_sa_key.access_key
+  }
+
+  entries {
+    key        = "YC_SECRET_ACCESS_KEY"
+    text_value = yandex_iam_service_account_static_access_key.storage_sa_key.secret_key
+  }
+}
+
+resource "yandex_resourcemanager_folder_iam_member" "storage_sa_role" {
   folder_id = var.folder_id
   role      = "storage.editor"
-  member    = "serviceAccount:${yandex_iam_service_account.trading_reports_sa.id}"
+  member    = "serviceAccount:${yandex_iam_service_account.storage_sa.id}"
 }
 
-resource "time_sleep" "wait_for_iam" {
-  depends_on = [
-    yandex_resourcemanager_folder_iam_member.trading_reports_sa_storage
-  ]
-  create_duration = "30s"
-}
-
-resource "yandex_iam_service_account_static_access_key" "trading_reports_sa_key" {
-  service_account_id = yandex_iam_service_account.trading_reports_sa.id
+resource "yandex_iam_service_account_static_access_key" "storage_sa_key" {
+  service_account_id = yandex_iam_service_account.storage_sa.id
   description        = "S3 access for trading reports backend"
 }
 
 resource "yandex_storage_bucket" "reports_bucket" {
   bucket = "bucket-for-reports-orders"
-  access_key = yandex_iam_service_account_static_access_key.trading_reports_sa_key.access_key
-  secret_key = yandex_iam_service_account_static_access_key.trading_reports_sa_key.secret_key
+  access_key = yandex_iam_service_account_static_access_key.storage_sa_key.access_key
+  secret_key = yandex_iam_service_account_static_access_key.storage_sa_key.secret_key
 
   force_destroy = true
 
@@ -60,33 +93,61 @@ resource "yandex_storage_bucket" "reports_bucket" {
   }
 
   depends_on = [
-    time_sleep.wait_for_iam
+    time_sleep.wait_iam
   ]
+}
+resource "time_sleep" "wait_iam" {
+  depends_on = [
+    yandex_resourcemanager_folder_iam_member.storage_sa_role,
+    yandex_resourcemanager_folder_iam_member.registry_ci_pusher,
+    yandex_resourcemanager_folder_iam_member.registry_ci_puller,
+    yandex_resourcemanager_folder_iam_member.runtime_logs,
+    yandex_resourcemanager_folder_iam_member.runtime_registry_puller
+  ]
+  create_duration = "30s"
+}
+
+resource "yandex_resourcemanager_folder_iam_member" "runtime_registry_puller" {
+  folder_id = var.folder_id
+  role      = "container-registry.images.puller"
+  member    = "serviceAccount:${yandex_iam_service_account.runtime_sa.id}"
 }
 
 resource "yandex_container_registry" "backend_registry" {
   name = "backend-registry"
 }
 
-resource "yandex_resourcemanager_folder_iam_member" "trading_reports_sa_registry_pusher" {
+resource "yandex_resourcemanager_folder_iam_member" "registry_ci_pusher" {
   folder_id = var.folder_id
   role      = "container-registry.images.pusher"
-  member    = "serviceAccount:${yandex_iam_service_account.trading_reports_sa.id}"
+  member    = "serviceAccount:${yandex_iam_service_account.registry_ci_sa.id}"
 }
 
-resource "yandex_resourcemanager_folder_iam_member" "trading_reports_sa_registry_puller" {
+resource "yandex_resourcemanager_folder_iam_member" "registry_ci_puller" {
   folder_id = var.folder_id
   role      = "container-registry.images.puller"
-  member    = "serviceAccount:${yandex_iam_service_account.trading_reports_sa.id}"
+  member    = "serviceAccount:${yandex_iam_service_account.registry_ci_sa.id}"
+}
+
+resource "yandex_resourcemanager_folder_iam_member" "runtime_logs" {
+  folder_id = var.folder_id
+  role      = "logging.writer"
+  member    = "serviceAccount:${yandex_iam_service_account.runtime_sa.id}"
+}
+
+resource "yandex_resourcemanager_folder_iam_member" "runtime_lockbox_access" {
+  folder_id = var.folder_id
+  role      = "lockbox.payloadViewer"
+  member    = "serviceAccount:${yandex_iam_service_account.runtime_sa.id}"
 }
 
 output "storage_access_key_id" {
-  value       = yandex_iam_service_account_static_access_key.trading_reports_sa_key.access_key
+  value       = yandex_iam_service_account_static_access_key.storage_sa_key.access_key
   description = "Access key for Object Storage"
 }
 
 output "storage_secret_access_key" {
-  value       = yandex_iam_service_account_static_access_key.trading_reports_sa_key.secret_key
+  value       = yandex_iam_service_account_static_access_key.storage_sa_key.secret_key
   description = "Secret key for Object Storage"
   sensitive   = true
 }
@@ -104,4 +165,19 @@ output "container_registry_id" {
 output "container_registry_name" {
   value       = yandex_container_registry.backend_registry.name
   description = "Name of Container Registry"
+}
+
+output "runtime_service_account_id" {
+  value       = yandex_iam_service_account.runtime_sa.id
+  description = "Service account ID for serverless backend runtime"
+}
+
+output "registry_ci_service_account_id" {
+  value       = yandex_iam_service_account.registry_ci_sa.id
+  description = "Service account ID for Container Registry CI/CD"
+}
+
+output "lockbox_secret_id" {
+  value       = yandex_lockbox_secret.backend_secrets.id
+  description = "Lockbox secret ID with backend secrets"
 }

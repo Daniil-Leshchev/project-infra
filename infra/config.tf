@@ -20,6 +20,33 @@ data "terraform_remote_state" "iam" {
   }
 }
 
+data "yandex_lockbox_secret" "backend" {
+  secret_id = data.terraform_remote_state.iam.outputs.lockbox_secret_id
+}
+
+data "yandex_lockbox_secret_version" "backend" {
+  secret_id = data.yandex_lockbox_secret.backend.id
+}
+
+variable "backend_image_url" {
+  type = string
+}
+
+variable "backend_cpu" {
+  type    = number
+  default = 1
+}
+
+variable "backend_memory" {
+  type    = number
+  default = 512
+}
+
+variable "backend_concurrency" {
+  type    = number
+  default = 6
+}
+
 # VARIABLES
 
 variable "cloud_id" {
@@ -40,10 +67,8 @@ locals {
   db_workdir              = "/opt/postgres"
   db_compose_b64          = base64encode(file("${path.module}/files/docker-compose.yml"))
   db_init_sql_b64         = base64encode(file("${path.module}/files/init.sql"))
-  db_env_b64              = base64encode(file("${path.module}/../.env"))
+  db_env_b64              = base64encode(file("${path.module}/files/.env"))
   bastion_private_key_b64 = base64encode(file("~/.ssh/id_rsa"))
-  s3_access_key_id        = data.terraform_remote_state.iam.outputs.storage_access_key_id
-  s3_secret_access_key    = data.terraform_remote_state.iam.outputs.storage_secret_access_key
 }
 
 # NETWORK
@@ -238,6 +263,56 @@ EOF
   }
 }
 
+resource "yandex_serverless_container" "backend" {
+  name = "project-backend"
+
+  memory = var.backend_memory
+  cores  = var.backend_cpu
+
+  execution_timeout = "30s"
+  concurrency       = var.backend_concurrency
+
+  image {
+    url = var.backend_image_url
+    environment = {
+      DB_HOST               = yandex_compute_instance.vm-1.network_interface.0.ip_address
+      DB_PORT               = "5432"
+      DB_NAME               = "exchange_db"
+      DB_USER               = "postgres"
+      YC_OBJ_STORAGE_BUCKET = data.terraform_remote_state.iam.outputs.storage_bucket_name
+      YC_REGION             = "ru-central1"
+    }
+  }
+
+  secrets {
+    environment_variable = "POSTGRES_PASSWORD"
+    id                   = data.yandex_lockbox_secret.backend.id
+    version_id           = data.yandex_lockbox_secret_version.backend.id
+    key                  = "POSTGRES_PASSWORD"
+  }
+
+  secrets {
+    environment_variable = "YC_ACCESS_KEY_ID"
+    id                   = data.yandex_lockbox_secret.backend.id
+    version_id           = data.yandex_lockbox_secret_version.backend.id
+    key                  = "YC_ACCESS_KEY_ID"
+  }
+
+  secrets {
+    environment_variable = "YC_SECRET_ACCESS_KEY"
+    id                   = data.yandex_lockbox_secret.backend.id
+    version_id           = data.yandex_lockbox_secret_version.backend.id
+    key                  = "YC_SECRET_ACCESS_KEY"
+  }
+
+  service_account_id = data.terraform_remote_state.iam.outputs.runtime_service_account_id
+
+  connectivity {
+    network_id = yandex_vpc_network.network-1.id
+  }
+
+}
+
 # OUTPUTS
 
 output "internal_ip_address_vm_1" {
@@ -250,4 +325,8 @@ output "external_ip_address_vm_1" {
 
 output "external_ip_address_bastion" {
   value = yandex_compute_instance.bastion.network_interface.0.nat_ip_address
+}
+
+output "backend_container_id" {
+  value = yandex_serverless_container.backend.id
 }
